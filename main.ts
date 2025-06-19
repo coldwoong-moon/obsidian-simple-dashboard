@@ -1,134 +1,181 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, ItemView, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import moment from 'moment';
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+interface DashboardSettings {
+    noteFolder: string;
+    dailyNoteFolder: string;
+    calendarUrls: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: DashboardSettings = {
+    noteFolder: 'Notes',
+    dailyNoteFolder: 'Daily',
+    calendarUrls: ''
+};
+
+const VIEW_TYPE = 'simple-dashboard-view';
+
+export default class DashboardPlugin extends Plugin {
+    settings: DashboardSettings;
+
+    async onload() {
+        await this.loadSettings();
+
+        this.addRibbonIcon('calendar-with-checkmark', 'Open Dashboard', () => {
+            this.activateView();
+        });
+
+        this.addCommand({
+            id: 'open-dashboard-view',
+            name: 'Open Dashboard',
+            callback: () => this.activateView()
+        });
+
+        this.addCommand({
+            id: 'create-daily-note',
+            name: 'Create Daily Note',
+            callback: () => this.createDailyNote()
+        });
+
+        this.addCommand({
+            id: 'create-note-in-folder',
+            name: 'Create Note in Dashboard Folder',
+            callback: () => this.createNoteInFolder()
+        });
+
+        this.registerView(VIEW_TYPE, leaf => new DashboardView(leaf, this));
+        this.addSettingTab(new DashboardSettingTab(this.app, this));
+    }
+
+    onunload() {
+        this.app.workspace.getLeavesOfType(VIEW_TYPE).forEach(l => l.detach());
+    }
+
+    async activateView() {
+        const { workspace } = this.app;
+        let leaf: WorkspaceLeaf | null | undefined = workspace.getLeavesOfType(VIEW_TYPE)[0];
+        if (!leaf) {
+            leaf = workspace.getRightLeaf(false);
+            if (leaf) await leaf.setViewState({ type: VIEW_TYPE, active: true });
+        }
+        if (leaf) workspace.revealLeaf(leaf);
+    }
+
+    async createDailyNote() {
+        const date = moment().format('YYYY-MM-DD');
+        const path = `${this.settings.dailyNoteFolder}/${date}.md`;
+        await this.app.vault.create(path, `# ${date}`);
+        const file = this.app.vault.getAbstractFileByPath(path) as TFile;
+        if (file) await this.app.workspace.getLeaf(true).openFile(file);
+    }
+
+    async createNoteInFolder() {
+        const name = moment().format('YYYYMMDDHHmmss');
+        const path = `${this.settings.noteFolder}/${name}.md`;
+        await this.app.vault.create(path, `# ${name}`);
+        const file = this.app.vault.getAbstractFileByPath(path) as TFile;
+        if (file) await this.app.workspace.getLeaf(true).openFile(file);
+    }
+
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
+
+    async saveSettings() {
+        await this.saveData(this.settings);
+    }
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+class DashboardView extends ItemView {
+    plugin: DashboardPlugin;
+    constructor(leaf: any, plugin: DashboardPlugin) {
+        super(leaf);
+        this.plugin = plugin;
+    }
 
-	async onload() {
-		await this.loadSettings();
+    getViewType() { return VIEW_TYPE; }
+    getDisplayText() { return 'Dashboard'; }
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+    async onOpen() {
+        const container = this.containerEl.children[1];
+        container.empty();
+        const header = container.createEl('h2', { text: 'Dashboard' });
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+        const last = this.getLastModified();
+        container.createEl('div', { text: `Last note: ${last ? moment(last).fromNow() : 'N/A'}` });
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+        const notes = await this.getNotesForDate(moment());
+        const list = container.createEl('ul');
+        for (const note of notes) {
+            list.createEl('li', { text: note.basename });
+        }
+    }
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
+    async getNotesForDate(date: moment.Moment): Promise<TFile[]> {
+        const vault = this.app.vault.getMarkdownFiles();
+        const start = date.clone().startOf('day').valueOf();
+        const end = date.clone().endOf('day').valueOf();
+        let files: TFile[] = [];
+        if ((this.app as any).bases) {
+            try {
+                const bases = (this.app as any).bases;
+                const query = `file.ctime >= ${start} && file.ctime <= ${end}`;
+                const result = await bases.search(query);
+                files = result.files as TFile[];
+            } catch (e) {
+                console.error('bases search failed', e);
+            }
+        }
+        if (!files.length) {
+            files = vault.filter(f => f.stat.ctime >= start && f.stat.ctime <= end);
+        }
+        return files;
+    }
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
-
-	onunload() {
-
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+    getLastModified(): number | null {
+        const files = this.app.vault.getMarkdownFiles();
+        const sorted = files.sort((a, b) => b.stat.mtime - a.stat.mtime);
+        return sorted.length ? sorted[0].stat.mtime : null;
+    }
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+class DashboardSettingTab extends PluginSettingTab {
+    plugin: DashboardPlugin;
+    constructor(app: App, plugin: DashboardPlugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
+    display(): void {
+        const { containerEl } = this;
+        containerEl.empty();
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
+        new Setting(containerEl)
+            .setName('Note folder')
+            .setDesc('Default folder to create notes')
+            .addText(t => t.setValue(this.plugin.settings.noteFolder)
+                .onChange(async v => {
+                    this.plugin.settings.noteFolder = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Daily note folder')
+            .setDesc('Folder to create daily notes')
+            .addText(t => t.setValue(this.plugin.settings.dailyNoteFolder)
+                .onChange(async v => {
+                    this.plugin.settings.dailyNoteFolder = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Calendar URLs')
+            .setDesc('Comma separated ICS URLs')
+            .addTextArea(t => t.setValue(this.plugin.settings.calendarUrls)
+                .onChange(async v => {
+                    this.plugin.settings.calendarUrls = v;
+                    await this.plugin.saveSettings();
+                }));
+    }
 }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
-}
