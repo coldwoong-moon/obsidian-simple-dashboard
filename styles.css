@@ -27,3 +27,12 @@
 .sd-stats div {
     margin-bottom: 0.25rem;
 }
+
+.sd-overdue {
+    color: var(--color-red);
+    font-weight: bold;
+}
+
+.sd-due-soon {
+    color: var(--color-orange);
+}

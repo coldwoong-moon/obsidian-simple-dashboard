@@ -180,12 +180,17 @@ export default class DashboardPlugin extends Plugin {
 
     async addGoal() {
         const text = window.prompt('새 목표를 입력하세요');
-        if (text) {
-            this.goals.push({ text, done: false });
-            await this.saveSettings();
-            new Notice('목표가 추가되었습니다');
-            this.refreshView();
+        if (!text) return;
+        const dueStr = window.prompt('목표 마감일을 YYYY-MM-DD 형식으로 입력하세요(선택)');
+        let due: string | undefined;
+        if (dueStr) {
+            const m = moment(dueStr, 'YYYY-MM-DD', true);
+            if (m.isValid()) due = m.format('YYYY-MM-DD');
         }
+        this.goals.push({ text, done: false, due });
+        await this.saveSettings();
+        new Notice('목표가 추가되었습니다');
+        this.refreshView();
     }
 
     async toggleGoal(index: number) {
@@ -356,7 +361,13 @@ class DashboardView extends ItemView {
             const cb = item.createEl('input', { type: 'checkbox' });
             cb.checked = g.done;
             cb.onchange = () => this.plugin.toggleGoal(i);
-            item.createEl('span', { text: ` ${g.text}` });
+            const label = g.due ? `${g.text} (${g.due})` : g.text;
+            const span = item.createEl('span', { text: ` ${label}` });
+            if (g.due && !g.done) {
+                const due = moment(g.due, 'YYYY-MM-DD');
+                if (due.isBefore(moment(), 'day')) span.addClass('sd-overdue');
+                else if (due.diff(moment(), 'day') <= 1) span.addClass('sd-due-soon');
+            }
             const del = item.createEl('button', { text: '×', cls: 'sd-remove' });
             del.onclick = () => this.plugin.deleteGoal(i);
         });
@@ -381,7 +392,12 @@ class DashboardView extends ItemView {
             cb.checked = t.done;
             cb.onchange = () => this.plugin.toggleTask(idx);
             const label = t.due ? `${t.text} (${t.due})` : t.text;
-            item.createEl('span', { text: ` ${label}` });
+            const span = item.createEl('span', { text: ` ${label}` });
+            if (t.due && !t.done) {
+                const due = moment(t.due, 'YYYY-MM-DD');
+                if (due.isBefore(moment(), 'day')) span.addClass('sd-overdue');
+                else if (due.diff(moment(), 'day') <= 1) span.addClass('sd-due-soon');
+            }
             const del = item.createEl('button', { text: '×', cls: 'sd-remove' });
             del.onclick = () => this.plugin.deleteTask(idx);
         });
