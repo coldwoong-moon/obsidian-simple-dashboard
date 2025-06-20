@@ -81,6 +81,7 @@ export default class DashboardPlugin extends Plugin {
 
     async createDailyNote() {
         const date = moment().format('YYYY-MM-DD');
+        await this.ensureFolder(this.settings.dailyNoteFolder);
         const path = `${this.settings.dailyNoteFolder}/${date}.md`;
         await this.app.vault.create(path, `# ${date}`);
         const file = this.app.vault.getAbstractFileByPath(path) as TFile;
@@ -89,10 +90,23 @@ export default class DashboardPlugin extends Plugin {
 
     async createNoteInFolder() {
         const name = moment().format('YYYYMMDDHHmmss');
+        await this.ensureFolder(this.settings.noteFolder);
         const path = `${this.settings.noteFolder}/${name}.md`;
         await this.app.vault.create(path, `# ${name}`);
         const file = this.app.vault.getAbstractFileByPath(path) as TFile;
         if (file) await this.app.workspace.getLeaf(true).openFile(file);
+    }
+
+    async ensureFolder(folderPath: string) {
+        if (this.app.vault.getAbstractFileByPath(folderPath)) return;
+        const parts = folderPath.split('/');
+        let current = '';
+        for (const part of parts) {
+            current = current ? `${current}/${part}` : part;
+            if (!this.app.vault.getAbstractFileByPath(current)) {
+                await this.app.vault.createFolder(current);
+            }
+        }
     }
 
     goals: Goal[] = [];

@@ -14,6 +14,7 @@
 ## 설정 방법
 
 플러그인 설정에서 기본 노트 폴더, 데일리 노트 폴더, 캘린더 ICS URL을 입력할 수 있습니다. 여러 주소는 쉼표로 구분합니다. 구글 캘린더의 경우 설정에서 비공개 주소(ICS)를 복사해 넣으면 되며, iCloud도 마찬가지로 공유 링크의 `.ics` 주소를 사용합니다.
+폴더가 없을 경우 노트를 만들면서 자동으로 생성됩니다.
 
 ## 개발 및 빌드
 
@@ -22,6 +23,8 @@
 ```bash
 npm install
 npm run dev
+# 플러그인으로 배포하려면 빌드 후 결과 파일을 플러그인 폴더에 복사하세요
+npm run build
 ```
 
 빌드가 완료되면 `main.js`, `manifest.json`, `styles.css` 파일을 볼트의 `.obsidian/plugins/simple-dashboard` 폴더에 복사해 사용할 수 있습니다.
