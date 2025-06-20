@@ -15,9 +15,11 @@
 
 ## 개발 및 빌드
 
+이 플러그인은 [Build a plugin](https://docs.obsidian.md/Plugins/Getting+started/Build+a+plugin) 튜토리얼의 구조를 따릅니다. 안전한 개발을 위해 별도의 테스트 볼트를 만들고 아래 명령으로 의존성을 설치한 후 빌드를 실행하세요.
+
 ```bash
-npm i
+npm install
 npm run dev
 ```
 
-빌드 후 생성된 `main.js`, `manifest.json`, `styles.css` 파일을 원하는 볼트의 `.obsidian/plugins/simple-dashboard` 폴더에 복사해 사용합니다.
+빌드가 완료되면 `main.js`, `manifest.json`, `styles.css` 파일을 볼트의 `.obsidian/plugins/simple-dashboard` 폴더에 복사해 사용할 수 있습니다.

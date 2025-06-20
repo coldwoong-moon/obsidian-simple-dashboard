@@ -1,5 +1,6 @@
-import { App, ItemView, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import moment from 'moment';
+import * as ical from 'node-ical';
 
 interface DashboardSettings {
     noteFolder: string;
@@ -109,6 +110,16 @@ class DashboardView extends ItemView {
         for (const note of notes) {
             list.createEl('li', { text: note.basename });
         }
+
+        const events = await this.getEventsForDate(moment());
+        if (events.length) {
+            container.createEl('h3', { text: 'Events' });
+            const eventList = container.createEl('ul');
+            for (const ev of events) {
+                const time = moment(ev.start).format('HH:mm');
+                eventList.createEl('li', { text: `${time} ${ev.summary}` });
+            }
+        }
     }
 
     async getNotesForDate(date: moment.Moment): Promise<TFile[]> {
@@ -130,6 +141,29 @@ class DashboardView extends ItemView {
             files = vault.filter(f => f.stat.ctime >= start && f.stat.ctime <= end);
         }
         return files;
+    }
+
+    async getEventsForDate(date: moment.Moment): Promise<{summary: string; start: Date}[]> {
+        const urls = this.plugin.settings.calendarUrls.split(',').map(u => u.trim()).filter(Boolean);
+        const events: {summary: string; start: Date}[] = [];
+        for (const url of urls) {
+            try {
+                const data = await ical.async.fromURL(url);
+                for (const key in data) {
+                    const ev = data[key] as any;
+                    if (ev.type === 'VEVENT') {
+                        const start = moment(ev.start);
+                        if (start.isSame(date, 'day')) {
+                            events.push({ summary: ev.summary || '', start: ev.start });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('ics fetch failed', e);
+            }
+        }
+        events.sort((a, b) => a.start.getTime() - b.start.getTime());
+        return events;
     }
 
     getLastModified(): number | null {
