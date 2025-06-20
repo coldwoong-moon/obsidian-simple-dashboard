@@ -196,6 +196,12 @@ export default class DashboardPlugin extends Plugin {
         this.refreshView();
     }
 
+    async deleteGoal(index: number) {
+        this.goals.splice(index, 1);
+        await this.saveSettings();
+        this.refreshView();
+    }
+
     async addTask() {
         const text = window.prompt('새 할 일을 입력하세요');
         if (text) {
@@ -214,6 +220,12 @@ export default class DashboardPlugin extends Plugin {
         this.refreshView();
     }
 
+    async deleteTask(index: number) {
+        this.tasks.splice(index, 1);
+        await this.saveSettings();
+        this.refreshView();
+    }
+
     refreshView() {
         this.app.workspace
             .getLeavesOfType(VIEW_TYPE)
@@ -223,6 +235,9 @@ export default class DashboardPlugin extends Plugin {
 
 class DashboardView extends ItemView {
     plugin: DashboardPlugin;
+    timeEl: HTMLElement | null = null;
+    timeInterval: number | null = null;
+    selectedDate: moment.Moment = moment();
     constructor(leaf: any, plugin: DashboardPlugin) {
         super(leaf);
         this.plugin = plugin;
@@ -232,7 +247,17 @@ class DashboardView extends ItemView {
     getDisplayText() { return 'Dashboard'; }
 
     async onOpen() {
+        this.selectedDate = moment();
         await this.render();
+        this.timeInterval = window.setInterval(() => this.updateTime(), 1000);
+    }
+
+    async onClose() {
+        if (this.timeInterval) window.clearInterval(this.timeInterval);
+    }
+
+    updateTime() {
+        if (this.timeEl) this.timeEl.setText(moment().format('LLLL'));
     }
 
     async render() {
@@ -241,72 +266,97 @@ class DashboardView extends ItemView {
 
         const grid = container.createDiv({ cls: 'sd-grid' });
 
+        // Date selector
+        const dateEl = grid.createDiv({ cls: 'sd-date' });
+        const dateInput = dateEl.createEl('input', { type: 'date' });
+        dateInput.value = this.selectedDate.format('YYYY-MM-DD');
+        dateInput.onchange = async () => {
+            this.selectedDate = moment(dateInput.value);
+            await this.render();
+        };
+
         // Time section
-        const timeEl = grid.createDiv({ cls: 'sd-time' });
-        timeEl.createEl('h2', { text: moment().format('LLLL') });
+        const timeWrap = grid.createDiv({ cls: 'sd-time' });
+        this.timeEl = timeWrap.createEl('h2', { text: moment().format('LLLL') });
 
         // Recent notes
         const notesEl = grid.createDiv({ cls: 'sd-notes' });
         notesEl.createEl('h3', { text: 'Recent Notes' });
         const last = this.getLastModified();
         notesEl.createEl('div', { text: `Last note: ${last ? moment(last).fromNow() : 'N/A'}` });
-        const todayNotes = await this.getNotesForRange(moment().startOf('day'), moment().endOf('day'));
+        const todayNotes = await this.getNotesForRange(this.selectedDate.clone().startOf('day'), this.selectedDate.clone().endOf('day'));
         const dayList = notesEl.createEl('ul');
-        todayNotes.forEach(n => dayList.createEl('li', { text: n.basename }));
+        todayNotes.forEach(n => {
+            const li = dayList.createEl('li');
+            const link = li.createEl('a', { text: n.basename, href: '#' });
+            link.onclick = (e) => { e.preventDefault(); this.app.workspace.getLeaf(true).openFile(n); };
+        });
 
-        const weekNotes = await this.getNotesForRange(moment().startOf('week'), moment().endOf('week'));
+        const weekNotes = await this.getNotesForRange(this.selectedDate.clone().startOf('week'), this.selectedDate.clone().endOf('week'));
         if (weekNotes.length) {
             notesEl.createEl('h4', { text: 'This Week' });
             const weekList = notesEl.createEl('ul');
-            weekNotes.forEach(n => weekList.createEl('li', { text: n.basename }));
+            weekNotes.forEach(n => {
+                const li = weekList.createEl('li');
+                const link = li.createEl('a', { text: n.basename, href: '#' });
+                link.onclick = (e) => { e.preventDefault(); this.app.workspace.getLeaf(true).openFile(n); };
+            });
         }
 
-        const monthNotes = await this.getNotesForRange(moment().startOf('month'), moment().endOf('month'));
+        const monthNotes = await this.getNotesForRange(this.selectedDate.clone().startOf('month'), this.selectedDate.clone().endOf('month'));
         if (monthNotes.length) {
             notesEl.createEl('h4', { text: 'This Month' });
             const monthList = notesEl.createEl('ul');
-            monthNotes.forEach(n => monthList.createEl('li', { text: n.basename }));
+            monthNotes.forEach(n => {
+                const li = monthList.createEl('li');
+                const link = li.createEl('a', { text: n.basename, href: '#' });
+                link.onclick = (e) => { e.preventDefault(); this.app.workspace.getLeaf(true).openFile(n); };
+            });
         }
 
         // Goals
         const goalEl = grid.createDiv({ cls: 'sd-goals' });
-        if (this.plugin.goals.length) {
-            goalEl.createEl('h3', { text: 'Goals' });
-            const goalList = goalEl.createEl('ul');
-            this.plugin.goals.forEach((g, i) => {
-                const item = goalList.createEl('li');
-                const cb = item.createEl('input', { type: 'checkbox' });
-                cb.checked = g.done;
-                cb.onchange = () => this.plugin.toggleGoal(i);
-                item.createEl('span', { text: ` ${g.text}` });
-            });
-        }
+        const gHeader = goalEl.createDiv({ cls: 'sd-section-header' });
+        gHeader.createEl('h3', { text: 'Goals' });
+        const gAdd = gHeader.createEl('button', { text: '+' });
+        gAdd.onclick = () => this.plugin.addGoal();
+        const goalList = goalEl.createEl('ul');
+        this.plugin.goals.forEach((g, i) => {
+            const item = goalList.createEl('li');
+            const cb = item.createEl('input', { type: 'checkbox' });
+            cb.checked = g.done;
+            cb.onchange = () => this.plugin.toggleGoal(i);
+            item.createEl('span', { text: ` ${g.text}` });
+            const del = item.createEl('button', { text: '×', cls: 'sd-remove' });
+            del.onclick = () => this.plugin.deleteGoal(i);
+        });
 
         // Tasks
         const taskEl = grid.createDiv({ cls: 'sd-tasks' });
-        if (this.plugin.tasks.length) {
-            taskEl.createEl('h3', { text: 'Tasks' });
-            const taskList = taskEl.createEl('ul');
-            this.plugin.tasks.forEach((t, i) => {
-                const item = taskList.createEl('li');
-                const cb = item.createEl('input', { type: 'checkbox' });
-                cb.checked = t.done;
-                cb.onchange = () => this.plugin.toggleTask(i);
-                item.createEl('span', { text: ` ${t.text}` });
-            });
-        }
+        const tHeader = taskEl.createDiv({ cls: 'sd-section-header' });
+        tHeader.createEl('h3', { text: 'Tasks' });
+        const tAdd = tHeader.createEl('button', { text: '+' });
+        tAdd.onclick = () => this.plugin.addTask();
+        const taskList = taskEl.createEl('ul');
+        this.plugin.tasks.forEach((t, i) => {
+            const item = taskList.createEl('li');
+            const cb = item.createEl('input', { type: 'checkbox' });
+            cb.checked = t.done;
+            cb.onchange = () => this.plugin.toggleTask(i);
+            item.createEl('span', { text: ` ${t.text}` });
+            const del = item.createEl('button', { text: '×', cls: 'sd-remove' });
+            del.onclick = () => this.plugin.deleteTask(i);
+        });
 
         // Events
         const eventsEl = grid.createDiv({ cls: 'sd-events' });
-        const events = await this.getEventsForDate(moment());
-        if (events.length) {
-            eventsEl.createEl('h3', { text: 'Events' });
-            const eventList = eventsEl.createEl('ul');
-            events.forEach(ev => {
-                const time = moment(ev.start).format('HH:mm');
-                eventList.createEl('li', { text: `${time} ${ev.summary}` });
-            });
-        }
+        eventsEl.createEl('h3', { text: 'Events' });
+        const events = await this.getEventsForDate(this.selectedDate);
+        const eventList = eventsEl.createEl('ul');
+        events.forEach(ev => {
+            const time = moment(ev.start).format('HH:mm');
+            eventList.createEl('li', { text: `${time} ${ev.summary}` });
+        });
     }
 
     async getNotesForRange(startDate: moment.Moment, endDate: moment.Moment): Promise<TFile[]> {
