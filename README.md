@@ -27,4 +27,4 @@ npm run dev
 npm run build
 ```
 
-빌드가 완료되면 `main.js`, `manifest.json`, `styles.css` 파일을 볼트의 `.obsidian/plugins/simple-dashboard` 폴더에 복사해 사용할 수 있습니다.
+빌드가 완료되면 `main.js`, `manifest.json`, `styles.css` 파일이 생성됩니다. 이 저장소에는 편의를 위해 이미 컴파일된 `main.js`가 포함되어 있으므로, 전체 폴더를 그대로 플러그인 디렉터리에 복사해도 됩니다. 최신 변경 사항을 반영하려면 `npm run build`를 실행한 뒤 복사하세요.
