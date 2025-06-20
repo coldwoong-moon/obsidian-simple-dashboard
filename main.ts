@@ -14,9 +14,16 @@ interface Goal {
     due?: string;
 }
 
+interface Task {
+    text: string;
+    done: boolean;
+    due?: string;
+}
+
 interface PluginData {
     settings: DashboardSettings;
     goals: Goal[];
+    tasks: Task[];
 }
 
 const DEFAULT_SETTINGS: DashboardSettings = {
@@ -67,6 +74,12 @@ export default class DashboardPlugin extends Plugin {
             callback: () => this.addGoal()
         });
 
+        this.addCommand({
+            id: 'add-task',
+            name: 'Add Task',
+            callback: () => this.addTask()
+        });
+
         this.registerView(VIEW_TYPE, leaf => new DashboardView(leaf, this));
         this.addSettingTab(new DashboardSettingTab(this.app, this));
     }
@@ -79,7 +92,7 @@ export default class DashboardPlugin extends Plugin {
         const { workspace } = this.app;
         let leaf: WorkspaceLeaf | null | undefined = workspace.getLeavesOfType(VIEW_TYPE)[0];
         if (!leaf) {
-            leaf = workspace.getRightLeaf(false);
+            leaf = workspace.getLeaf(true);
             if (leaf) await leaf.setViewState({ type: VIEW_TYPE, active: true });
         }
         if (leaf) workspace.revealLeaf(leaf);
@@ -145,6 +158,7 @@ export default class DashboardPlugin extends Plugin {
     }
 
     goals: Goal[] = [];
+    tasks: Task[] = [];
 
     async loadSettings() {
         const data = (await this.loadData()) as PluginData | null;
@@ -156,10 +170,11 @@ export default class DashboardPlugin extends Plugin {
         }
         this.settings = loaded;
         this.goals = data?.goals || [];
+        this.tasks = data?.tasks || [];
     }
 
     async saveSettings() {
-        const data: PluginData = { settings: this.settings, goals: this.goals };
+        const data: PluginData = { settings: this.settings, goals: this.goals, tasks: this.tasks };
         await this.saveData(data);
     }
 
@@ -177,6 +192,24 @@ export default class DashboardPlugin extends Plugin {
         const goal = this.goals[index];
         if (!goal) return;
         goal.done = !goal.done;
+        await this.saveSettings();
+        this.refreshView();
+    }
+
+    async addTask() {
+        const text = window.prompt('새 할 일을 입력하세요');
+        if (text) {
+            this.tasks.push({ text, done: false });
+            await this.saveSettings();
+            new Notice('할 일이 추가되었습니다');
+            this.refreshView();
+        }
+    }
+
+    async toggleTask(index: number) {
+        const t = this.tasks[index];
+        if (!t) return;
+        t.done = !t.done;
         await this.saveSettings();
         this.refreshView();
     }
@@ -205,39 +238,41 @@ class DashboardView extends ItemView {
     async render() {
         const container = this.containerEl.children[1];
         container.empty();
-        container.createEl('h2', { text: 'Dashboard' });
 
+        const grid = container.createDiv({ cls: 'sd-grid' });
+
+        // Time section
+        const timeEl = grid.createDiv({ cls: 'sd-time' });
+        timeEl.createEl('h2', { text: moment().format('LLLL') });
+
+        // Recent notes
+        const notesEl = grid.createDiv({ cls: 'sd-notes' });
+        notesEl.createEl('h3', { text: 'Recent Notes' });
         const last = this.getLastModified();
-        container.createEl('div', { text: `Last note: ${last ? moment(last).fromNow() : 'N/A'}` });
-
-        container.createEl('h3', { text: 'Today' });
+        notesEl.createEl('div', { text: `Last note: ${last ? moment(last).fromNow() : 'N/A'}` });
         const todayNotes = await this.getNotesForRange(moment().startOf('day'), moment().endOf('day'));
-        const dayList = container.createEl('ul');
-        for (const note of todayNotes) {
-            dayList.createEl('li', { text: note.basename });
-        }
+        const dayList = notesEl.createEl('ul');
+        todayNotes.forEach(n => dayList.createEl('li', { text: n.basename }));
 
         const weekNotes = await this.getNotesForRange(moment().startOf('week'), moment().endOf('week'));
         if (weekNotes.length) {
-            container.createEl('h3', { text: 'This Week' });
-            const weekList = container.createEl('ul');
-            for (const note of weekNotes) {
-                weekList.createEl('li', { text: note.basename });
-            }
+            notesEl.createEl('h4', { text: 'This Week' });
+            const weekList = notesEl.createEl('ul');
+            weekNotes.forEach(n => weekList.createEl('li', { text: n.basename }));
         }
 
         const monthNotes = await this.getNotesForRange(moment().startOf('month'), moment().endOf('month'));
         if (monthNotes.length) {
-            container.createEl('h3', { text: 'This Month' });
-            const monthList = container.createEl('ul');
-            for (const note of monthNotes) {
-                monthList.createEl('li', { text: note.basename });
-            }
+            notesEl.createEl('h4', { text: 'This Month' });
+            const monthList = notesEl.createEl('ul');
+            monthNotes.forEach(n => monthList.createEl('li', { text: n.basename }));
         }
 
+        // Goals
+        const goalEl = grid.createDiv({ cls: 'sd-goals' });
         if (this.plugin.goals.length) {
-            container.createEl('h3', { text: 'Goals' });
-            const goalList = container.createEl('ul');
+            goalEl.createEl('h3', { text: 'Goals' });
+            const goalList = goalEl.createEl('ul');
             this.plugin.goals.forEach((g, i) => {
                 const item = goalList.createEl('li');
                 const cb = item.createEl('input', { type: 'checkbox' });
@@ -247,14 +282,30 @@ class DashboardView extends ItemView {
             });
         }
 
+        // Tasks
+        const taskEl = grid.createDiv({ cls: 'sd-tasks' });
+        if (this.plugin.tasks.length) {
+            taskEl.createEl('h3', { text: 'Tasks' });
+            const taskList = taskEl.createEl('ul');
+            this.plugin.tasks.forEach((t, i) => {
+                const item = taskList.createEl('li');
+                const cb = item.createEl('input', { type: 'checkbox' });
+                cb.checked = t.done;
+                cb.onchange = () => this.plugin.toggleTask(i);
+                item.createEl('span', { text: ` ${t.text}` });
+            });
+        }
+
+        // Events
+        const eventsEl = grid.createDiv({ cls: 'sd-events' });
         const events = await this.getEventsForDate(moment());
         if (events.length) {
-            container.createEl('h3', { text: 'Events' });
-            const eventList = container.createEl('ul');
-            for (const ev of events) {
+            eventsEl.createEl('h3', { text: 'Events' });
+            const eventList = eventsEl.createEl('ul');
+            events.forEach(ev => {
                 const time = moment(ev.start).format('HH:mm');
                 eventList.createEl('li', { text: `${time} ${ev.summary}` });
-            }
+            });
         }
     }
 
