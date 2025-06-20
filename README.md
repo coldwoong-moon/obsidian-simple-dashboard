@@ -1,94 +1,27 @@
-# Obsidian Sample Plugin
+# Simple Dashboard
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+이 플러그인은 옵시디언에서 데일리, 위클리, 월간 노트와 외부 캘린더의 정보를 간단한 대시보드 형태로 보여줍니다. Obsidian 1.9 버전에서 도입된 **Bases** 기능을 활용해 원하는 날짜의 노트 목록을 가져오며, 사용자 지정 버튼을 통해 새 노트나 데일리 노트를 손쉽게 생성할 수 있습니다. 간단한 목표 관리 기능도 제공하여 개인 지식 관리 습관을 도와줍니다.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## 주요 기능
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+- 아이콘이나 명령으로 대시보드 뷰 열기
+- 설정한 폴더에 새 노트 또는 데일리 노트 생성
+- Bases 기능을 이용한 날짜별 노트 목록 표시(지원되지 않을 경우 기본 검색 사용)
+- 오늘/이번 주/이번 달 작성한 노트 목록 제공
+- iCloud, Google 등에서 제공하는 ICS 주소를 입력해 일정 표시 가능
+- 목표 리스트를 체크박스로 관리
 
-## First time developing plugins?
+## 설정 방법
 
-Quick starting guide for new plugin devs:
+플러그인 설정에서 기본 노트 폴더, 데일리 노트 폴더, 캘린더 ICS URL을 입력할 수 있습니다. 여러 주소는 쉼표로 구분합니다. 구글 캘린더의 경우 설정에서 비공개 주소(ICS)를 복사해 넣으면 되며, iCloud도 마찬가지로 공유 링크의 `.ics` 주소를 사용합니다.
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+## 개발 및 빌드
 
-## Releasing new releases
+이 플러그인은 [Build a plugin](https://docs.obsidian.md/Plugins/Getting+started/Build+a+plugin) 튜토리얼의 구조를 따릅니다. 안전한 개발을 위해 별도의 테스트 볼트를 만들고 아래 명령으로 의존성을 설치한 후 빌드를 실행하세요.
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
-
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
-
-## Adding your plugin to the community plugin list
-
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
-
-## How to use
-
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+```bash
+npm install
+npm run dev
 ```
 
-If you have multiple URLs, you can also do:
-
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
-
-## API Documentation
-
-See https://github.com/obsidianmd/obsidian-api
+빌드가 완료되면 `main.js`, `manifest.json`, `styles.css` 파일을 볼트의 `.obsidian/plugins/simple-dashboard` 폴더에 복사해 사용할 수 있습니다.
