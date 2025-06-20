@@ -1,9 +1,9 @@
-import { App, ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, FuzzySuggestModal } from 'obsidian';
 import moment from 'moment';
 import * as ical from 'node-ical';
 
 interface DashboardSettings {
-    noteFolder: string;
+    noteFolders: string[];
     dailyNoteFolder: string;
     calendarUrls: string;
 }
@@ -20,7 +20,7 @@ interface PluginData {
 }
 
 const DEFAULT_SETTINGS: DashboardSettings = {
-    noteFolder: 'Notes',
+    noteFolders: ['Notes'],
     dailyNoteFolder: 'Daily',
     calendarUrls: ''
 };
@@ -47,6 +47,12 @@ export default class DashboardPlugin extends Plugin {
             id: 'create-daily-note',
             name: 'Create Daily Note',
             callback: () => this.createDailyNote()
+        });
+
+        this.addCommand({
+            id: 'create-daily-note-for-date',
+            name: 'Create Daily Note (Choose Date)',
+            callback: () => this.createDailyNoteForDate()
         });
 
         this.addCommand({
@@ -79,22 +85,51 @@ export default class DashboardPlugin extends Plugin {
         if (leaf) workspace.revealLeaf(leaf);
     }
 
-    async createDailyNote() {
-        const date = moment().format('YYYY-MM-DD');
+    async createDailyNote(date: moment.Moment = moment()) {
+        const str = date.format('YYYY-MM-DD');
         await this.ensureFolder(this.settings.dailyNoteFolder);
-        const path = `${this.settings.dailyNoteFolder}/${date}.md`;
-        await this.app.vault.create(path, `# ${date}`);
+        const path = `${this.settings.dailyNoteFolder}/${str}.md`;
+        if (!this.app.vault.getAbstractFileByPath(path)) {
+            await this.app.vault.create(path, `# ${str}`);
+        }
         const file = this.app.vault.getAbstractFileByPath(path) as TFile;
         if (file) await this.app.workspace.getLeaf(true).openFile(file);
     }
 
+    async createDailyNoteForDate() {
+        const date = await this.pickDate();
+        if (date) await this.createDailyNote(date);
+    }
+
     async createNoteInFolder() {
+        const folder = await this.selectFolder();
+        if (!folder) return;
         const name = moment().format('YYYYMMDDHHmmss');
-        await this.ensureFolder(this.settings.noteFolder);
-        const path = `${this.settings.noteFolder}/${name}.md`;
+        await this.ensureFolder(folder);
+        const path = `${folder}/${name}.md`;
         await this.app.vault.create(path, `# ${name}`);
         const file = this.app.vault.getAbstractFileByPath(path) as TFile;
         if (file) await this.app.workspace.getLeaf(true).openFile(file);
+    }
+
+    async selectFolder(): Promise<string | null> {
+        const folders = this.settings.noteFolders;
+        if (folders.length === 1) return folders[0];
+        return new Promise(resolve => {
+            const modal = new FolderSuggestModal(this.app, folders, (f) => resolve(f));
+            modal.open();
+        });
+    }
+
+    async pickDate(): Promise<moment.Moment | null> {
+        const options: moment.Moment[] = [];
+        for (let i = -7; i <= 7; i++) {
+            options.push(moment().add(i, 'day'));
+        }
+        return new Promise(resolve => {
+            const modal = new DateSuggestModal(this.app, options, d => resolve(d));
+            modal.open();
+        });
     }
 
     async ensureFolder(folderPath: string) {
@@ -113,7 +148,13 @@ export default class DashboardPlugin extends Plugin {
 
     async loadSettings() {
         const data = (await this.loadData()) as PluginData | null;
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, data?.settings);
+        const loaded = Object.assign({}, DEFAULT_SETTINGS, data?.settings);
+        // backward compatibility for old single folder field
+        const anyLoaded = loaded as any;
+        if (anyLoaded.noteFolder && !anyLoaded.noteFolders) {
+            loaded.noteFolders = [anyLoaded.noteFolder];
+        }
+        this.settings = loaded;
         this.goals = data?.goals || [];
     }
 
@@ -280,11 +321,11 @@ class DashboardSettingTab extends PluginSettingTab {
         containerEl.empty();
 
         new Setting(containerEl)
-            .setName('Note folder')
-            .setDesc('Default folder to create notes')
-            .addText(t => t.setValue(this.plugin.settings.noteFolder)
+            .setName('Note folders')
+            .setDesc('Comma separated folders for new notes')
+            .addTextArea(t => t.setValue(this.plugin.settings.noteFolders.join(', '))
                 .onChange(async v => {
-                    this.plugin.settings.noteFolder = v;
+                    this.plugin.settings.noteFolders = v.split(',').map(s => s.trim()).filter(Boolean);
                     await this.plugin.saveSettings();
                 }));
 
@@ -306,5 +347,25 @@ class DashboardSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
     }
+}
+
+class FolderSuggestModal extends FuzzySuggestModal<string> {
+    onChoose: (folder: string) => void;
+    constructor(app: App, private folders: string[], onChoose: (folder: string) => void) {
+        super(app);
+        this.onChoose = onChoose;
+    }
+    getItems(): string[] { return this.folders; }
+    getItemText(item: string): string { return item; }
+    onChooseItem(item: string): void { this.onChoose(item); }
+}
+
+class DateSuggestModal extends FuzzySuggestModal<moment.Moment> {
+    constructor(app: App, private dates: moment.Moment[], private onChoose: (date: moment.Moment) => void) {
+        super(app);
+    }
+    getItems(): moment.Moment[] { return this.dates; }
+    getItemText(item: moment.Moment): string { return item.format('YYYY-MM-DD'); }
+    onChooseItem(item: moment.Moment): void { this.onChoose(item); }
 }
 
