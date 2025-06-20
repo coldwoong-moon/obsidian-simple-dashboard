@@ -231,6 +231,20 @@ export default class DashboardPlugin extends Plugin {
             .getLeavesOfType(VIEW_TYPE)
             .forEach((l) => (l.view as DashboardView).render());
     }
+
+    async calculateDailyStreak(): Promise<number> {
+        let streak = 0;
+        while (true) {
+            const date = moment().subtract(streak, 'day').format('YYYY-MM-DD');
+            const path = `${this.settings.dailyNoteFolder}/${date}.md`;
+            if (this.app.vault.getAbstractFileByPath(path)) {
+                streak++;
+            } else {
+                break;
+            }
+        }
+        return streak;
+    }
 }
 
 class DashboardView extends ItemView {
@@ -314,6 +328,15 @@ class DashboardView extends ItemView {
             });
         }
 
+        // Stats
+        const statsEl = grid.createDiv({ cls: 'sd-stats' });
+        statsEl.createEl('h3', { text: 'Stats' });
+        statsEl.createDiv({ text: `오늘 작성한 노트: ${todayNotes.length}` });
+        statsEl.createDiv({ text: `이번 주 작성한 노트: ${weekNotes.length}` });
+        statsEl.createDiv({ text: `이번 달 작성한 노트: ${monthNotes.length}` });
+        const streak = await this.plugin.calculateDailyStreak();
+        statsEl.createDiv({ text: `데일리 노트 연속 작성일: ${streak}` });
+
         // Goals
         const goalEl = grid.createDiv({ cls: 'sd-goals' });
         const gHeader = goalEl.createDiv({ cls: 'sd-section-header' });
@@ -350,11 +373,14 @@ class DashboardView extends ItemView {
 
         // Events
         const eventsEl = grid.createDiv({ cls: 'sd-events' });
-        eventsEl.createEl('h3', { text: 'Events' });
-        const events = await this.getEventsForDate(this.selectedDate);
+        eventsEl.createEl('h3', { text: 'Events This Week' });
+        const events = await this.getEventsForRange(
+            this.selectedDate.clone().startOf('week'),
+            this.selectedDate.clone().endOf('week')
+        );
         const eventList = eventsEl.createEl('ul');
         events.forEach(ev => {
-            const time = moment(ev.start).format('HH:mm');
+            const time = moment(ev.start).format('MM-DD HH:mm');
             eventList.createEl('li', { text: `${time} ${ev.summary}` });
         });
     }
@@ -380,7 +406,7 @@ class DashboardView extends ItemView {
         return files;
     }
 
-    async getEventsForDate(date: moment.Moment): Promise<{summary: string; start: Date}[]> {
+    async getEventsForRange(startDate: moment.Moment, endDate: moment.Moment): Promise<{summary: string; start: Date}[]> {
         const urls = this.plugin.settings.calendarUrls.split(',').map(u => u.trim()).filter(Boolean);
         const events: {summary: string; start: Date}[] = [];
         for (const url of urls) {
@@ -390,7 +416,7 @@ class DashboardView extends ItemView {
                     const ev = data[key] as any;
                     if (ev.type === 'VEVENT') {
                         const start = moment(ev.start);
-                        if (start.isSame(date, 'day')) {
+                        if (start.isBetween(startDate, endDate, undefined, '[]')) {
                             events.push({ summary: ev.summary || '', start: ev.start });
                         }
                     }
