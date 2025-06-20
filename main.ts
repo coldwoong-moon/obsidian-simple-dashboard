@@ -204,12 +204,17 @@ export default class DashboardPlugin extends Plugin {
 
     async addTask() {
         const text = window.prompt('새 할 일을 입력하세요');
-        if (text) {
-            this.tasks.push({ text, done: false });
-            await this.saveSettings();
-            new Notice('할 일이 추가되었습니다');
-            this.refreshView();
+        if (!text) return;
+        const dueStr = window.prompt('마감일을 YYYY-MM-DD 형식으로 입력하세요(선택)');
+        let due: string | undefined;
+        if (dueStr) {
+            const m = moment(dueStr, 'YYYY-MM-DD', true);
+            if (m.isValid()) due = m.format('YYYY-MM-DD');
         }
+        this.tasks.push({ text, done: false, due });
+        await this.saveSettings();
+        new Notice('할 일이 추가되었습니다');
+        this.refreshView();
     }
 
     async toggleTask(index: number) {
@@ -252,6 +257,7 @@ class DashboardView extends ItemView {
     timeEl: HTMLElement | null = null;
     timeInterval: number | null = null;
     selectedDate: moment.Moment = moment();
+    eventRange: 'week' | 'month' = 'week';
     constructor(leaf: any, plugin: DashboardPlugin) {
         super(leaf);
         this.plugin = plugin;
@@ -262,6 +268,7 @@ class DashboardView extends ItemView {
 
     async onOpen() {
         this.selectedDate = moment();
+        this.eventRange = 'week';
         await this.render();
         this.timeInterval = window.setInterval(() => this.updateTime(), 1000);
     }
@@ -361,22 +368,41 @@ class DashboardView extends ItemView {
         const tAdd = tHeader.createEl('button', { text: '+' });
         tAdd.onclick = () => this.plugin.addTask();
         const taskList = taskEl.createEl('ul');
-        this.plugin.tasks.forEach((t, i) => {
+        const tasks = this.plugin.tasks.map((t, idx) => ({ t, idx })).sort((a, b) => {
+            if (a.t.done !== b.t.done) return a.t.done ? 1 : -1;
+            if (a.t.due && b.t.due) return moment(a.t.due).valueOf() - moment(b.t.due).valueOf();
+            if (a.t.due) return -1;
+            if (b.t.due) return 1;
+            return 0;
+        });
+        tasks.forEach(({ t, idx }) => {
             const item = taskList.createEl('li');
             const cb = item.createEl('input', { type: 'checkbox' });
             cb.checked = t.done;
-            cb.onchange = () => this.plugin.toggleTask(i);
-            item.createEl('span', { text: ` ${t.text}` });
+            cb.onchange = () => this.plugin.toggleTask(idx);
+            const label = t.due ? `${t.text} (${t.due})` : t.text;
+            item.createEl('span', { text: ` ${label}` });
             const del = item.createEl('button', { text: '×', cls: 'sd-remove' });
-            del.onclick = () => this.plugin.deleteTask(i);
+            del.onclick = () => this.plugin.deleteTask(idx);
         });
 
         // Events
         const eventsEl = grid.createDiv({ cls: 'sd-events' });
-        eventsEl.createEl('h3', { text: 'Events This Week' });
+        const eHeader = eventsEl.createDiv({ cls: 'sd-section-header' });
+        eHeader.createEl('h3', { text: this.eventRange === 'week' ? 'Events This Week' : 'Events This Month' });
+        const rangeSel = eHeader.createEl('select');
+        [{value:'week', label:'주간'}, {value:'month', label:'월간'}].forEach(o => {
+            const opt = rangeSel.createEl('option', { value: o.value });
+            opt.text = o.label;
+        });
+        rangeSel.value = this.eventRange;
+        rangeSel.onchange = async () => {
+            this.eventRange = rangeSel.value as 'week' | 'month';
+            await this.render();
+        };
         const events = await this.getEventsForRange(
-            this.selectedDate.clone().startOf('week'),
-            this.selectedDate.clone().endOf('week')
+            this.selectedDate.clone().startOf(this.eventRange),
+            this.selectedDate.clone().endOf(this.eventRange)
         );
         const eventList = eventsEl.createEl('ul');
         events.forEach(ev => {
