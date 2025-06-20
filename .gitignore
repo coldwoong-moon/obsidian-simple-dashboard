@@ -7,10 +7,9 @@
 
 # npm
 node_modules
+package-lock.json
 
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
-main.js
+# The compiled main.js file is now included for convenience.
 
 # Exclude sourcemaps
 *.map

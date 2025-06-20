@@ -1,8 +1,38 @@
-/*
+.sd-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.sd-grid > div {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    padding: 0.5rem;
+}
 
-If your plugin does not need CSS, delete this file.
+.sd-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
-*/
+.sd-section-header button {
+    margin-left: 0.5rem;
+}
+
+.sd-remove {
+    margin-left: 0.5rem;
+}
+
+.sd-stats div {
+    margin-bottom: 0.25rem;
+}
+
+.sd-overdue {
+    color: var(--color-red);
+    font-weight: bold;
+}
+
+.sd-due-soon {
+    color: var(--color-orange);
+}
